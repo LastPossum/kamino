@@ -8,7 +8,7 @@ import (
 
 type config struct {
 	expectedPointersCount int
-	forceUnexported       bool
+	unexportedStrategy    unexportedStrategy
 	errOnUnsuported       bool
 }
 
@@ -20,22 +20,36 @@ func WithExpectedPtrsCount(cnt int) func(*config) {
 	}
 }
 
+type unexportedStrategy int
+
+const (
+	shallowCopyUnexportedStrategy unexportedStrategy = iota
+	forceDeepCopyUnexportedStrategy
+	forceZeroUnexported
+)
+
 func WithForceUnexported() func(*config) {
 	return func(c *config) {
-		c.forceUnexported = true
+		c.unexportedStrategy = forceDeepCopyUnexportedStrategy
 	}
 }
 
-func WithSkipUnsupported() func(*config) {
+func WithZeroUnexported() func(*config) {
+	return func(c *config) {
+		c.unexportedStrategy = forceZeroUnexported
+	}
+}
+
+func WithErrOnUnsupported() func(*config) {
 	return func(c *config) {
 		c.errOnUnsuported = true
 	}
 }
 
 type cloneCtx struct {
-	ptrs            map[unsafe.Pointer]reflect.Value
-	forceUnexported bool
-	errOnUnsuported bool
+	ptrs               map[unsafe.Pointer]reflect.Value
+	unexportedStrategy unexportedStrategy
+	errOnUnsuported    bool
 }
 
 func (ctx *cloneCtx) resolvePointer(ptr unsafe.Pointer) (reflect.Value, bool) {
@@ -58,9 +72,9 @@ func Clone[T any](src T, opts ...funcOptions) (T, error) {
 	}
 
 	ctx := &cloneCtx{
-		ptrs:            make(map[unsafe.Pointer]reflect.Value, cfg.expectedPointersCount),
-		forceUnexported: cfg.forceUnexported,
-		errOnUnsuported: cfg.errOnUnsuported,
+		ptrs:               make(map[unsafe.Pointer]reflect.Value, cfg.expectedPointersCount),
+		unexportedStrategy: cfg.unexportedStrategy,
+		errOnUnsuported:    cfg.errOnUnsuported,
 	}
 
 	valPtr := reflect.NewAt(reflect.TypeOf(src), unsafe.Pointer(&src))
@@ -76,7 +90,7 @@ func cloneNested(ctx *cloneCtx, valPtr reflect.Value) error {
 	switch v.Kind() {
 	case reflect.Struct:
 		for i := 0; i < v.NumField(); i++ {
-			if !needCp(v.Field(i)) {
+			if ctx.unexportedStrategy == shallowCopyUnexportedStrategy && !needCp(v.Field(i)) {
 				continue
 			}
 
@@ -89,12 +103,18 @@ func cloneNested(ctx *cloneCtx, valPtr reflect.Value) error {
 				continue
 			}
 
-			if !ctx.forceUnexported {
+			switch ctx.unexportedStrategy {
+			case shallowCopyUnexportedStrategy:
 				continue
-			}
-			newAt := reflect.NewAt(wField.Type(), unsafe.Pointer(wField.UnsafeAddr()))
-			if err := cloneNested(ctx, newAt); err != nil {
-				return err
+			case forceDeepCopyUnexportedStrategy:
+				newAt := reflect.NewAt(wField.Type(), unsafe.Pointer(wField.UnsafeAddr()))
+				if err := cloneNested(ctx, newAt); err != nil {
+					return err
+				}
+			case forceZeroUnexported:
+				typ := wField.Type()
+				newAt := reflect.NewAt(typ, unsafe.Pointer(wField.UnsafeAddr()))
+				newAt.Elem().Set(reflect.Zero(typ))
 			}
 		}
 	case reflect.Array:

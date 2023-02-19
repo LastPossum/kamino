@@ -326,6 +326,30 @@ func TestForceCloneUnexported(t *testing.T) {
 	assert.NotEqual(t, unsafe.Pointer(foo.ptr2), unsafe.Pointer(bar.ptr2))
 }
 
+func TestForceZeroUnexported(t *testing.T) {
+	type Foo struct {
+		A    int
+		a    int
+		Ptr1 *int
+		ptr2 *int
+	}
+
+	foo := Foo{
+		1, 2, ptrTo(3), ptrTo(4),
+	}
+
+	bar, _ := kamino.Clone(foo, kamino.WithZeroUnexported())
+	assert.Equal(t, foo.A, bar.A)
+	assert.Equal(t, foo.Ptr1, bar.Ptr1)
+
+	assert.Equal(t, 2, foo.a)
+	assert.Equal(t, ptrTo(4), foo.ptr2)
+
+	var nilintPtr *int
+	assert.Equal(t, 0, bar.a)
+	assert.Equal(t, nilintPtr, bar.ptr2)
+}
+
 type Fooer interface {
 	foo() int
 }
@@ -376,4 +400,18 @@ func TestCopyNestedNil(t *testing.T) {
 	got, _ := kamino.Clone(nn)
 
 	assert.Equal(t, got, nn)
+}
+
+func TestWithErrOnUnsupported(t *testing.T) {
+	type foo struct {
+		F func()
+	}
+
+	f := foo{F: func() {}}
+
+	_, err := kamino.Clone(f)
+	assert.NoError(t, err)
+
+	_, err = kamino.Clone(f, kamino.WithErrOnUnsupported())
+	assert.Error(t, err)
 }
