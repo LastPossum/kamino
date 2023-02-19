@@ -9,7 +9,7 @@ import (
 type config struct {
 	expectedPointersCount int
 	forceUnexported       bool
-	skipUnsupported       bool
+	errOnUnsuported       bool
 }
 
 type funcOptions func(*config)
@@ -28,14 +28,14 @@ func WithForceUnexported() func(*config) {
 
 func WithSkipUnsupported() func(*config) {
 	return func(c *config) {
-		c.skipUnsupported = true
+		c.errOnUnsuported = true
 	}
 }
 
 type cloneCtx struct {
 	ptrs            map[unsafe.Pointer]reflect.Value
 	forceUnexported bool
-	skipUnsupported bool
+	errOnUnsuported bool
 }
 
 func (ctx *cloneCtx) resolvePointer(ptr unsafe.Pointer) (reflect.Value, bool) {
@@ -60,7 +60,7 @@ func Clone[T any](src T, opts ...funcOptions) (T, error) {
 	ctx := &cloneCtx{
 		ptrs:            make(map[unsafe.Pointer]reflect.Value, cfg.expectedPointersCount),
 		forceUnexported: cfg.forceUnexported,
-		skipUnsupported: cfg.skipUnsupported,
+		errOnUnsuported: cfg.errOnUnsuported,
 	}
 
 	valPtr := reflect.NewAt(reflect.TypeOf(src), unsafe.Pointer(&src))
@@ -194,10 +194,9 @@ func cloneNested(ctx *cloneCtx, valPtr reflect.Value) error {
 		}
 		valPtr.Elem().Set(newV.Elem())
 	default:
-		if ctx.skipUnsupported {
-			return nil
+		if ctx.errOnUnsuported {
+			return fmt.Errorf("unsupported type: %s", v.Type().Name())
 		}
-		return fmt.Errorf("unsupported type: %s", v.Type().Name())
 	}
 
 	return nil

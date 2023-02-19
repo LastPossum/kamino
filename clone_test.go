@@ -1,30 +1,14 @@
 package kamino_test
 
 import (
-	"encoding/json"
 	"testing"
 	"time"
 	"unsafe"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/vmihailenco/msgpack"
 
 	"github.com/LastPossum/kamino"
 )
-
-func CloneJSON[T any](obj T) T {
-	x, _ := json.Marshal(obj)
-	var res T
-	json.Unmarshal(x, &res)
-	return res
-}
-
-func cloneMsgPack[T any](x T) T {
-	b, _ := msgpack.Marshal(x)
-	var res T
-	msgpack.Unmarshal(b, &res)
-	return res
-}
 
 type simpleStruct struct {
 	Int     int
@@ -176,9 +160,6 @@ func TestClone2(t *testing.T) {
 
 		got, _ := kamino.Clone(param)
 		assert.Equal(t, param, got)
-
-		gotjson := CloneJSON(param)
-		assert.Equal(t, param, gotjson)
 	})
 
 	t.Run("pointer", func(t *testing.T) {
@@ -384,4 +365,15 @@ func TestCopyNestedTime(t *testing.T) {
 	got, _ := kamino.Clone(nt)
 
 	assert.Equal(t, got.T, nt.T)
+}
+
+func TestCopyNestedNil(t *testing.T) {
+	type nestedNil struct {
+		X any
+	}
+
+	nn := nestedNil{}
+	got, _ := kamino.Clone(nn)
+
+	assert.Equal(t, got, nn)
 }
