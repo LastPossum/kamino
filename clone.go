@@ -76,8 +76,7 @@ func Clone[T any](src T, opts ...funcOptions) (T, error) {
 		unexportedStrategy: cfg.unexportedStrategy,
 		errOnUnsuported:    cfg.errOnUnsuported,
 	}
-
-	valPtr := reflect.NewAt(reflect.TypeOf(src), unsafe.Pointer(&src))
+	valPtr := reflect.ValueOf(&src)
 	err := cloneNested(ctx, valPtr)
 	return src, err
 }

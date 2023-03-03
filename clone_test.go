@@ -260,6 +260,16 @@ func TestInterface(t *testing.T) {
 	assert.True(t, a == b)
 }
 
+func TestAny(t *testing.T) {
+	x := any(simpleStructIntance)
+	y, _ := kamino.Clone(x)
+	assert.Equal(t, x, y)
+
+	ys, ok := y.(simpleStruct)
+	assert.True(t, ok)
+	assert.Equal(t, ys, simpleStructIntance)
+}
+
 func TestTwoNils(t *testing.T) {
 	type Foo struct {
 		A int
