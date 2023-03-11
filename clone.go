@@ -88,10 +88,6 @@ func cloneNested(ctx *cloneCtx, v reflect.Value) error {
 	switch v.Kind() {
 	case reflect.Struct:
 		for i := 0; i < v.NumField(); i++ {
-			if ctx.unexportedStrategy == shallowCopyUnexportedStrategy && !needCp(v.Field(i)) {
-				continue
-			}
-
 			wField := v.Field(i)
 
 			if wField.CanSet() {
