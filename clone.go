@@ -76,13 +76,12 @@ func Clone[T any](src T, opts ...funcOptions) (T, error) {
 		unexportedStrategy: cfg.unexportedStrategy,
 		errOnUnsuported:    cfg.errOnUnsuported,
 	}
-	valPtr := reflect.ValueOf(&src)
-	err := cloneNested(ctx, valPtr)
+	valAtPtr := reflect.ValueOf(&src).Elem()
+	err := cloneNested(ctx, valAtPtr)
 	return src, err
 }
 
-func cloneNested(ctx *cloneCtx, valPtr reflect.Value) error {
-	v := reflect.Indirect(valPtr)
+func cloneNested(ctx *cloneCtx, v reflect.Value) error {
 	if !needCp(v) {
 		return nil
 	}
@@ -93,10 +92,10 @@ func cloneNested(ctx *cloneCtx, valPtr reflect.Value) error {
 				continue
 			}
 
-			wField := valPtr.Elem().Field(i)
+			wField := v.Field(i)
 
 			if wField.CanSet() {
-				if err := cloneNested(ctx, wField.Addr()); err != nil {
+				if err := cloneNested(ctx, wField); err != nil {
 					return err
 				}
 				continue
@@ -107,7 +106,7 @@ func cloneNested(ctx *cloneCtx, valPtr reflect.Value) error {
 				continue
 			case forceDeepCopyUnexportedStrategy:
 				newAt := reflect.NewAt(wField.Type(), unsafe.Pointer(wField.UnsafeAddr()))
-				if err := cloneNested(ctx, newAt); err != nil {
+				if err := cloneNested(ctx, newAt.Elem()); err != nil {
 					return err
 				}
 			case forceZeroUnexported:
@@ -122,7 +121,7 @@ func cloneNested(ctx *cloneCtx, valPtr reflect.Value) error {
 		reflect.Copy(res, v)
 
 		if isBasicKind(elem.Kind()) {
-			valPtr.Elem().Set(res)
+			v.Set(res)
 			return nil
 		}
 
@@ -131,19 +130,19 @@ func cloneNested(ctx *cloneCtx, valPtr reflect.Value) error {
 				continue
 			}
 
-			if err := cloneNested(ctx, res.Index(i).Addr()); err != nil {
+			if err := cloneNested(ctx, res.Index(i)); err != nil {
 				return err
 			}
 		}
 
-		valPtr.Elem().Set(res)
+		v.Set(res)
 	case reflect.Slice:
 		typ := v.Type()
 		res := reflect.MakeSlice(typ, v.Len(), v.Cap())
 		reflect.Copy(res, v)
 
 		if isBasicKind(typ.Elem().Kind()) {
-			valPtr.Elem().Set(res)
+			v.Set(res)
 			return nil
 		}
 
@@ -152,44 +151,46 @@ func cloneNested(ctx *cloneCtx, valPtr reflect.Value) error {
 				continue
 			}
 
-			if err := cloneNested(ctx, res.Index(i).Addr()); err != nil {
+			if err := cloneNested(ctx, res.Index(i)); err != nil {
 				return err
 			}
 		}
 
-		valPtr.Elem().Set(res)
+		v.Set(res)
 	case reflect.Map:
 		typ := v.Type()
 		res := reflect.MakeMapWithSize(typ, v.Len())
+
 		iter := v.MapRange()
-		newK := reflect.New(typ.Key())
-		newV := reflect.New(typ.Elem())
+		newK := reflect.New(typ.Key()).Elem()
+		newV := reflect.New(typ.Elem()).Elem()
+
 		for iter.Next() {
 			k := iter.Key()
 			if needCp(k) {
-				newK.Elem().Set(k)
+				newK.Set(k)
 				if err := cloneNested(ctx, newK); err != nil {
 					return err
 				}
-				k = newK.Elem()
+				k = newK
 			}
 			v := iter.Value()
 			if needCp(v) {
-				newV.Elem().Set(v)
+				newV.Set(v)
 				if err := cloneNested(ctx, newV); err != nil {
 					return err
 				}
-				v = newV.Elem()
+				v = newV
 			}
 			res.SetMapIndex(k, v)
 		}
 
-		valPtr.Elem().Set(res)
+		v.Set(res)
 	case reflect.Pointer:
 
 		ptr := v.UnsafePointer()
 		if newV, ok := ctx.resolvePointer(ptr); ok {
-			valPtr.Elem().Set(newV)
+			v.Set(newV)
 			return nil
 		}
 
@@ -197,21 +198,21 @@ func cloneNested(ctx *cloneCtx, valPtr reflect.Value) error {
 		ctx.setPointer(ptr, newV)
 
 		newV.Elem().Set(v.Elem())
-		if err := cloneNested(ctx, newV); err != nil {
+		if err := cloneNested(ctx, newV.Elem()); err != nil {
 			return err
 		}
 
-		valPtr.Elem().Set(newV)
+		v.Set(newV)
 	case reflect.Interface:
 		if !needCp(v.Elem()) {
 			return nil
 		}
-		newV := reflect.New(v.Elem().Type())
-		newV.Elem().Set(v.Elem())
+		newV := reflect.New(v.Elem().Type()).Elem()
+		newV.Set(v.Elem())
 		if err := cloneNested(ctx, newV); err != nil {
 			return err
 		}
-		valPtr.Elem().Set(newV.Elem())
+		v.Set(newV)
 	default:
 		if ctx.errOnUnsuported {
 			return fmt.Errorf("unsupported type: %s", v.Type().Name())
