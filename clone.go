@@ -122,10 +122,6 @@ func cloneNested(ctx *cloneCtx, v reflect.Value) error {
 		}
 
 		for i := 0; i < res.Len(); i++ {
-			if !needCp(res.Index(i)) {
-				continue
-			}
-
 			if err := cloneNested(ctx, res.Index(i)); err != nil {
 				return err
 			}
@@ -143,10 +139,6 @@ func cloneNested(ctx *cloneCtx, v reflect.Value) error {
 		}
 
 		for i := 0; i < res.Len(); i++ {
-			if !needCp(res.Index(i)) {
-				continue
-			}
-
 			if err := cloneNested(ctx, res.Index(i)); err != nil {
 				return err
 			}
