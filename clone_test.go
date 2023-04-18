@@ -1,6 +1,7 @@
 package kamino_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
 	"unsafe"
@@ -10,6 +11,35 @@ import (
 	"github.com/LastPossum/kamino"
 )
 
+func ExampleClone() {
+	tests := []any{
+		200000,
+		`units are ready, with a`,
+		1000000,
+		[]string{
+			"more well",
+			"on the way.",
+		},
+		map[string]any{
+			"I don't like sand": "It's coarse and rough and irritating and it gets everywhere.",
+		},
+	}
+
+	for _, expected := range tests {
+		actual, err := kamino.Clone(expected, kamino.WithErrOnUnsupported())
+		if err != nil {
+			fmt.Println("got error:", err)
+		}
+		fmt.Println(actual)
+	}
+	// Output:
+	// 200000
+	// units are ready, with a
+	// 1000000
+	// [more well on the way.]
+	// map[I don't like sand:It's coarse and rough and irritating and it gets everywhere.]
+}
+
 type simpleStruct struct {
 	Int     int
 	Float64 float64
@@ -17,6 +47,7 @@ type simpleStruct struct {
 }
 
 type alltogether struct {
+	Bool                bool
 	Int                 int
 	Float64             float64
 	String              string
@@ -37,6 +68,7 @@ var (
 	simpleStructIntance = simpleStruct{-1, -1, "-1"}
 
 	alltogetherInstance = alltogether{
+		Bool:       true,
 		Int:        10,
 		Float64:    20.,
 		String:     "30",
@@ -251,11 +283,11 @@ func TestClone2(t *testing.T) {
 }
 
 func TestInterface(t *testing.T) {
-	x := []interface{}{nil}
+	x := []any{nil}
 	y, _ := kamino.Clone(x)
 	assert.Equal(t, x, y)
 
-	var a interface{}
+	var a any
 	b, _ := kamino.Clone(a)
 	assert.True(t, a == b)
 }
@@ -413,15 +445,103 @@ func TestCopyNestedNil(t *testing.T) {
 }
 
 func TestWithErrOnUnsupported(t *testing.T) {
-	type foo struct {
-		F func()
-	}
+	t.Run("errOnUnsupported chans", func(t *testing.T) {
+		f := func() {}
 
-	f := foo{F: func() {}}
+		_, err := kamino.Clone(f)
+		assert.NoError(t, err)
 
-	_, err := kamino.Clone(f)
-	assert.NoError(t, err)
+		_, err = kamino.Clone(f, kamino.WithErrOnUnsupported())
+		assert.Error(t, err)
+	})
 
-	_, err = kamino.Clone(f, kamino.WithErrOnUnsupported())
-	assert.Error(t, err)
+	t.Run("errOnUnsupported funcs", func(t *testing.T) {
+		ch := make(chan int)
+
+		_, err := kamino.Clone(ch)
+		assert.NoError(t, err)
+
+		_, err = kamino.Clone(ch, kamino.WithErrOnUnsupported())
+		assert.Error(t, err)
+	})
+
+	t.Run("errOnUnsupported ptrs", func(t *testing.T) {
+		ch := make(chan int)
+		f := func() {}
+
+		_, err := kamino.Clone(ch, kamino.WithErrOnUnsupported())
+		assert.Error(t, err)
+
+		_, err = kamino.Clone(f, kamino.WithErrOnUnsupported())
+		assert.Error(t, err)
+	})
+
+	t.Run("errOnUnsupported with suported only", func(t *testing.T) {
+		_, err := kamino.Clone(alltogetherInstance, kamino.WithErrOnUnsupported())
+		assert.NoError(t, err)
+	})
+
+	t.Run("errOnUnsupported in structs", func(t *testing.T) {
+		type foo struct {
+			F func()
+		}
+
+		f := foo{F: func() {}}
+
+		_, err := kamino.Clone(f)
+		assert.NoError(t, err)
+
+		_, err = kamino.Clone(f, kamino.WithErrOnUnsupported())
+		assert.Error(t, err)
+
+		_, err = kamino.Clone(&f, kamino.WithErrOnUnsupported())
+		assert.Error(t, err)
+	})
+
+	t.Run("errOnUnsupported unexported in structs", func(t *testing.T) {
+		type foo struct {
+			f func()
+		}
+
+		f := foo{f: func() {}}
+
+		_, err := kamino.Clone(f)
+		assert.NoError(t, err)
+
+		_, err = kamino.Clone(f, kamino.WithErrOnUnsupported())
+		assert.NoError(t, err)
+
+		_, err = kamino.Clone(f, kamino.WithErrOnUnsupported(), kamino.WithForceUnexported())
+		assert.Error(t, err)
+	})
+
+	t.Run("errOnUnsupported in array", func(t *testing.T) {
+		a := [...]any{1, "2", func() {}}
+
+		_, err := kamino.Clone(a)
+		assert.NoError(t, err)
+
+		_, err = kamino.Clone(a, kamino.WithErrOnUnsupported())
+		assert.Error(t, err)
+	})
+
+	t.Run("errOnUnsupported in slice", func(t *testing.T) {
+		s := []any{1, "2", func() {}}
+
+		_, err := kamino.Clone(s)
+		assert.NoError(t, err)
+
+		_, err = kamino.Clone(s, kamino.WithErrOnUnsupported())
+		assert.Error(t, err)
+	})
+
+	t.Run("errOnUnsupported in maps", func(t *testing.T) {
+		s := map[string]any{"supported": 1, "unsuppotred": func() {}}
+
+		_, err := kamino.Clone(s)
+		assert.NoError(t, err)
+
+		_, err = kamino.Clone(s, kamino.WithErrOnUnsupported())
+		assert.Error(t, err)
+	})
 }
