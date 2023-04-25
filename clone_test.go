@@ -2,6 +2,7 @@ package kamino_test
 
 import (
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 	"unsafe"
@@ -545,3 +546,44 @@ func TestWithErrOnUnsupported(t *testing.T) {
 		assert.Error(t, err)
 	})
 }
+
+func TestCircularSlice(t *testing.T) {
+	t.Run("circular slice on a single element", func(t *testing.T) {
+		a := []any{nil}
+		a[0] = a
+		cp, err := kamino.Clone(a)
+
+		assert.NoError(t, err)
+		assert.Equal(t, cp, a)
+	})
+
+	t.Run("circular slice with different cap", func(t *testing.T) {
+		base := []any{nil, nil, nil}
+		base[0] = base
+		base[1] = base
+		base[2] = base
+
+		// a := base
+		b := base[:1]
+
+		cpB, err := kamino.Clone(b)
+		assert.NoError(t, err)
+		assert.Equal(t, len(cpB), len(b))
+		assert.True(t, reflect.DeepEqual(cpB[0], b[0]))
+
+		/*cpA, err := kamino.Clone(a)
+		  assert.NoError(t, err)
+		  assert.Equal(t, cpA, a)*/
+	})
+}
+
+/*
+func TestCircularMap(t *testing.T) {
+    a := map[string]any{"a": nil}
+    a["a"] = a
+    cp, err := kamino.Clone(a)
+
+    assert.NoError(t, err)
+    assert.Equal(t, cp, a)
+}
+*/
