@@ -78,21 +78,24 @@ func BenchmarkNestedMohae(b *testing.B) {
 }
 
 func BenchmarkNestedStruct(b *testing.B) {
-	for k, st := range nestedMap {
+	for k := 1; k <= 10; k++ {
+		st := nestedMap[k]
 		b.Run(fmt.Sprintf("barkimedes for %d fiels nested struct", k), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				barkimedes.Anything(st)
 			}
 		})
 	}
-	for k, st := range nestedMap {
+	for k := 1; k <= 10; k++ {
+		st := nestedMap[k]
 		b.Run(fmt.Sprintf("mohae for %d fiels nested struct", k), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				mohae.Copy(st)
 			}
 		})
 	}
-	for k, st := range nestedMap {
+	for k := 1; k <= 10; k++ {
+		st := nestedMap[k]
 		b.Run(fmt.Sprintf("json for %d fiels nested struct", k), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				cloneJSON(st)
@@ -100,7 +103,8 @@ func BenchmarkNestedStruct(b *testing.B) {
 		})
 	}
 
-	for k, st := range nestedMap {
+	for k := 1; k <= 10; k++ {
+		st := nestedMap[k]
 		b.Run(fmt.Sprintf("msgpack for %d fiels nested struct", k), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				cloneMsgPack(st)
@@ -108,7 +112,8 @@ func BenchmarkNestedStruct(b *testing.B) {
 		})
 	}
 
-	for k, st := range nestedMap {
+	for k := 1; k <= 10; k++ {
+		st := nestedMap[k]
 		b.Run(fmt.Sprintf("kamino for %d fiels nested struct", k), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				kamino.Clone(st)
@@ -118,7 +123,8 @@ func BenchmarkNestedStruct(b *testing.B) {
 }
 
 func BenchmarkNestedStructKamino(b *testing.B) {
-	for k, st := range nestedMap {
+	for k := 1; k <= 10; k++ {
+		st := nestedMap[k]
 		b.Run(fmt.Sprintf("kamino for %d fiels nested struct", k), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				kamino.Clone(st)

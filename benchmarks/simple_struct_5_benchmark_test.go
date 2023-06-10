@@ -9,7 +9,7 @@ import (
 	mohae "github.com/mohae/deepcopy"
 )
 
-var benchSimpleStruct5Instance = benchSimpleStruct5{1, 2, "3", 4, 5i}
+var benchSimpleStruct5Instance = benchSimpleStruct5{1, 2, "3", 4, true}
 
 //go:noinline
 func plainCopySimpleStruct5(src benchSimpleStruct5) benchSimpleStruct5 {
