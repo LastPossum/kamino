@@ -544,4 +544,25 @@ func TestWithErrOnUnsupported(t *testing.T) {
 		_, err = kamino.Clone(s, kamino.WithErrOnUnsupported())
 		assert.Error(t, err)
 	})
+
+}
+
+func TestEmptyStructPtrsShareSameAddress(t *testing.T) {
+	type A struct{}
+	type B struct{}
+	type C struct {
+		a *A
+		b *B
+	}
+
+	a := &A{}
+	b := &B{}
+
+	assert.Equal(t, unsafe.Pointer(a), unsafe.Pointer(b))
+
+	src := C{a: a, b: b}
+	got, err := kamino.Clone(src, kamino.WithForceUnexported())
+	assert.NoError(t, err)
+	assert.NotNil(t, got.a)
+	assert.NotNil(t, got.b)
 }

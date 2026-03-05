@@ -51,20 +51,29 @@ func WithErrOnUnsupported() func(*config) {
 	}
 }
 
+// ptrKey combines a pointer address with its pointed-to type so that two
+// pointers of different types that happen to share the same address (e.g.
+// pointers to distinct empty structs, which all point to runtime.zerobase)
+// are never confused with each other in the pointer cache.
+type ptrKey struct {
+	ptr unsafe.Pointer
+	typ reflect.Type
+}
+
 // cloneCtx contains settings and pointers to values mapping for single clone
 type cloneCtx struct {
-	ptrs               map[unsafe.Pointer]reflect.Value
+	ptrs               map[ptrKey]reflect.Value
 	unexportedStrategy unexportedStrategy
 	errOnUnsuported    bool
 }
 
-func (ctx *cloneCtx) resolvePointer(ptr unsafe.Pointer) (reflect.Value, bool) {
-	v, ok := ctx.ptrs[ptr]
+func (ctx *cloneCtx) resolvePointer(ptr unsafe.Pointer, typ reflect.Type) (reflect.Value, bool) {
+	v, ok := ctx.ptrs[ptrKey{ptr, typ}]
 	return v, ok
 }
 
-func (ctx *cloneCtx) setPointer(ptr unsafe.Pointer, value reflect.Value) {
-	ctx.ptrs[ptr] = value
+func (ctx *cloneCtx) setPointer(ptr unsafe.Pointer, typ reflect.Type, value reflect.Value) {
+	ctx.ptrs[ptrKey{ptr, typ}] = value
 }
 
 // Clone returns a deep copy of passed argument. The cloned value will be identical to the source value.
@@ -85,7 +94,7 @@ func Clone[T any](src T, opts ...funcOptions) (T, error) {
 	// clone ctx will be passet to any recursive call cloneNested object
 	// it sontains settings and a pointers to values mapping
 	ctx := &cloneCtx{
-		ptrs:               make(map[unsafe.Pointer]reflect.Value, cfg.expectedPointersCount),
+		ptrs:               make(map[ptrKey]reflect.Value, cfg.expectedPointersCount),
 		unexportedStrategy: cfg.unexportedStrategy,
 		errOnUnsuported:    cfg.errOnUnsuported,
 	}
@@ -224,16 +233,17 @@ func cloneNested(ctx *cloneCtx, v reflect.Value) error {
 	case reflect.Pointer:
 		// check if pointer has already been met
 		ptr := v.UnsafePointer()
-		if newV, ok := ctx.resolvePointer(ptr); ok {
+		elemTyp := v.Elem().Type()
+		if newV, ok := ctx.resolvePointer(ptr, elemTyp); ok {
 			// if it has been use previous copy
 			v.Set(newV)
 			return nil
 		}
 
 		// if this pointer has not been met create a new value
-		newV := reflect.New(v.Elem().Type())
+		newV := reflect.New(elemTyp)
 		// and put it to context
-		ctx.setPointer(ptr, newV)
+		ctx.setPointer(ptr, elemTyp, newV)
 
 		// put the source value to new pointer and recursively copy it
 		newV.Elem().Set(v.Elem())
