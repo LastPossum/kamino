@@ -1,6 +1,7 @@
 package kamino_test
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -605,4 +606,43 @@ func TestCloneMapValueUnderZeroKey(t *testing.T) {
 		cp[nilKey][0] = 999
 		assert.Equal(t, 1, m[nilKey][0], "clone must not share underlying array with source")
 	})
+}
+
+// TestCloneArrayOfStructsIsIndependent guards the in-place array cloning path:
+// nested non-basic elements must be deep copied so mutating the clone does not
+// touch the source.
+func TestCloneArrayOfStructsIsIndependent(t *testing.T) {
+	type item struct {
+		S []int
+	}
+	src := [2]item{{S: []int{1, 2}}, {S: []int{3, 4}}}
+
+	cp, err := kamino.Clone(src)
+	assert.NoError(t, err)
+	assert.Equal(t, src, cp)
+
+	cp[0].S[0] = 999
+	assert.Equal(t, 1, src[0].S[0], "clone must not share underlying array with source")
+}
+
+// TestCloneNilContainersStayNil ensures nil slices/maps are not turned into
+// empty non-nil ones by the clone.
+func TestCloneNilContainersStayNil(t *testing.T) {
+	type holder struct {
+		S []int
+		M map[string]int
+	}
+
+	cp, err := kamino.Clone(holder{})
+	assert.NoError(t, err)
+	assert.Nil(t, cp.S)
+	assert.Nil(t, cp.M)
+}
+
+// TestErrUnsupportedTypeIsWrapped ensures the returned error matches the
+// exported sentinel via errors.Is.
+func TestErrUnsupportedTypeIsWrapped(t *testing.T) {
+	_, err := kamino.Clone(func() {}, kamino.WithErrOnUnsupported())
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, kamino.ErrUnsupportedType))
 }

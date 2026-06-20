@@ -1,10 +1,16 @@
 package kamino
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"unsafe"
 )
+
+// ErrUnsupportedType is returned (wrapped) by Clone when WithErrOnUnsupported
+// is enabled and a value of an unsupported kind (chan or func) is encountered.
+// Use errors.Is to test for it.
+var ErrUnsupportedType = errors.New("kamino: unsupported type")
 
 type config struct {
 	expectedPointersCount int
@@ -18,6 +24,9 @@ type funcOptions func(*config)
 // If the amount of pointers in the source object is known and rather big, this setting could reduce allocations and improve performance.
 func WithExpectedPtrsCount(cnt int) func(*config) {
 	return func(c *config) {
+		if cnt < 0 {
+			cnt = 0
+		}
 		c.expectedPointersCount = cnt
 	}
 }
@@ -109,8 +118,15 @@ func Clone[T any](src T, opts ...funcOptions) (T, error) {
 
 func cloneNested(ctx *cloneCtx, v reflect.Value) error {
 	kind := v.Kind()
-	// check if the value should be copied, i.e. it's neither of basic type, nor zero
-	if isBasicKind(kind) || v.IsZero() {
+	// basic kinds are already fully copied by value, nothing to do
+	if isBasicKind(kind) {
+		return nil
+	}
+	// for nil-able kinds skip the work (and avoid dereferencing nil pointers /
+	// turning nil slices and maps into empty non-nil ones).
+	// struct and array are intentionally excluded here: IsZero recurses over
+	// every field/element, duplicating the traversal we are about to do anyway.
+	if kind != reflect.Struct && kind != reflect.Array && v.IsZero() {
 		return nil
 	}
 	//  handle according to original's Kind
@@ -148,27 +164,18 @@ func cloneNested(ctx *cloneCtx, v reflect.Value) error {
 			}
 		}
 	case reflect.Array:
-		// for arrays allocate the new one of the elem type
-		elem := v.Type().Elem()
-		res := reflect.New(reflect.ArrayOf(v.Len(), elem)).Elem()
-		// and copy values from source at once
-		reflect.Copy(res, v)
-
-		// if an elem kind is basic just return
-		if isBasicKind(elem.Kind()) {
-			v.Set(res)
+		// arrays are value types, so v already holds a copy of the data.
+		// if the elem kind is basic there is nothing left to deep copy.
+		if isBasicKind(v.Type().Elem().Kind()) {
 			return nil
 		}
 
-		// otherwise recursively clone the elems
-		for i := 0; i < res.Len(); i++ {
-			if err := cloneNested(ctx, res.Index(i)); err != nil {
+		// otherwise recursively clone the elems in place
+		for i := 0; i < v.Len(); i++ {
+			if err := cloneNested(ctx, v.Index(i)); err != nil {
 				return err
 			}
 		}
-
-		// replace the source with the copy
-		v.Set(res)
 	case reflect.Slice:
 		// for slices allocate the new one of the elem type
 		typ := v.Type()
@@ -268,7 +275,7 @@ func cloneNested(ctx *cloneCtx, v reflect.Value) error {
 	default:
 		// if unsupported type strategy has been setted to err - return an error
 		if ctx.errOnUnsuported {
-			return fmt.Errorf("unsupported type: %s", v.Type().Name())
+			return fmt.Errorf("%w: %s", ErrUnsupportedType, v.Type())
 		}
 	}
 
