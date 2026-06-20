@@ -566,3 +566,43 @@ func TestEmptyStructPtrsShareSameAddress(t *testing.T) {
 	assert.NotNil(t, got.a)
 	assert.NotNil(t, got.b)
 }
+
+// TestCloneMapValueUnderZeroKey guards against a regression where the decision
+// to deep copy a map value was driven by the key's zero-ness instead of the
+// value's. Under a zero key (e.g. "", 0, nil) the value used to be left
+// aliased to the source, so mutating the clone leaked into the original.
+func TestCloneMapValueUnderZeroKey(t *testing.T) {
+	t.Run("zero string key", func(t *testing.T) {
+		m := map[string][]int{"": {1, 2, 3}}
+
+		cp, err := kamino.Clone(m)
+		assert.NoError(t, err)
+		assert.Equal(t, m, cp)
+
+		cp[""][0] = 999
+		assert.Equal(t, 1, m[""][0], "clone must not share underlying array with source")
+	})
+
+	t.Run("zero int key", func(t *testing.T) {
+		m := map[int][]int{0: {1, 2, 3}}
+
+		cp, err := kamino.Clone(m)
+		assert.NoError(t, err)
+		assert.Equal(t, m, cp)
+
+		cp[0][0] = 999
+		assert.Equal(t, 1, m[0][0], "clone must not share underlying array with source")
+	})
+
+	t.Run("zero pointer key", func(t *testing.T) {
+		var nilKey *int
+		m := map[*int][]int{nilKey: {1, 2, 3}}
+
+		cp, err := kamino.Clone(m)
+		assert.NoError(t, err)
+		assert.Equal(t, m, cp)
+
+		cp[nilKey][0] = 999
+		assert.Equal(t, 1, m[nilKey][0], "clone must not share underlying array with source")
+	})
+}

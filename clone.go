@@ -217,7 +217,7 @@ func cloneNested(ctx *cloneCtx, v reflect.Value) error {
 			}
 			v := iter.Value()
 			// if value needs to be copied, copy it recursively
-			if !valueIsBasic && !k.IsZero() {
+			if !valueIsBasic && !v.IsZero() {
 				newV.Set(v)
 				if err := cloneNested(ctx, newV); err != nil {
 					return err
